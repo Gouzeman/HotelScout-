@@ -1,0 +1,54 @@
+services:
+  database:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-hotelscout}
+      POSTGRES_USER: ${POSTGRES_USER:-hotelscout}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hotelscout_dev}
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U ${POSTGRES_USER:-hotelscout} -d ${POSTGRES_DB:-hotelscout}
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  api:
+    build:
+      context: ./api
+      target: development
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-hotelscout}:${POSTGRES_PASSWORD:-hotelscout_dev}@database:5432/${POSTGRES_DB:-hotelscout}
+      SERPAPI_API_KEY: ${SERPAPI_API_KEY:-}
+      PORT: 3000
+      HOST: 0.0.0.0
+      CORS_ORIGIN: http://localhost:5173
+    depends_on:
+      database:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./api:/app
+      - api_node_modules:/app/node_modules
+
+  web:
+    build:
+      context: ./web
+      target: development
+    environment:
+      VITE_API_BASE_URL: http://localhost:3000
+    depends_on:
+      - api
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./web:/app
+      - web_node_modules:/app/node_modules
+
+volumes:
+  postgres_data:
+  api_node_modules:
+  web_node_modules:
