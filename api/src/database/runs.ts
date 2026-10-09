@@ -1,6 +1,24 @@
 import type pg from "pg";
 import type { HotelOffer, HotelSearchInput } from "../types.js";
 
+export interface HotelHistoryFilters {
+  propertyToken: string | null;
+  name: string;
+  checkIn: string;
+  checkOut: string;
+  adults: number;
+  children: number;
+  currency: string;
+}
+
+export interface HotelHistoryPoint {
+  runId: number;
+  observedAt: string;
+  nightlyPrice: number;
+  totalPrice: number | null;
+  currency: string;
+}
+
 export async function startRun(
   pool: pg.Pool,
   input: HotelSearchInput,
@@ -104,4 +122,58 @@ export async function failRun(
     `,
     [runId, message.slice(0, 4_000)],
   );
+}
+
+export async function getHotelHistory(
+  pool: pg.Pool,
+  filters: HotelHistoryFilters,
+): Promise<HotelHistoryPoint[]> {
+  const result = await pool.query<{
+    run_id: string;
+    observed_at: Date;
+    nightly_price: string;
+    total_price: string | null;
+    currency: string;
+  }>(
+    `
+      SELECT
+        r.id AS run_id,
+        r.observed_at,
+        o.nightly_price,
+        o.total_price,
+        o.currency
+      FROM hotel_offers o
+      JOIN collection_runs r ON r.id = o.run_id
+      WHERE r.status = 'success'
+        AND o.nightly_price IS NOT NULL
+        AND (
+          ($1::text IS NOT NULL AND o.property_token = $1)
+          OR ($1::text IS NULL AND o.name = $2)
+        )
+        AND r.check_in = $3
+        AND r.check_out = $4
+        AND r.adults = $5
+        AND r.children = $6
+        AND r.currency = $7
+      ORDER BY r.observed_at ASC
+      LIMIT 500
+    `,
+    [
+      filters.propertyToken,
+      filters.name,
+      filters.checkIn,
+      filters.checkOut,
+      filters.adults,
+      filters.children,
+      filters.currency,
+    ],
+  );
+
+  return result.rows.map((row) => ({
+    runId: Number(row.run_id),
+    observedAt: row.observed_at.toISOString(),
+    nightlyPrice: Number(row.nightly_price),
+    totalPrice: row.total_price === null ? null : Number(row.total_price),
+    currency: row.currency,
+  }));
 }

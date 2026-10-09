@@ -31,6 +31,22 @@ export interface HotelSearchResponse {
   offers: HotelOffer[];
 }
 
+export interface HotelHistoryPoint {
+  runId: number;
+  observedAt: string;
+  nightlyPrice: number;
+  totalPrice: number | null;
+  currency: string;
+}
+
+export interface HotelHistoryResponse {
+  hotel: {
+    propertyToken: string | null;
+    name: string;
+  };
+  points: HotelHistoryPoint[];
+}
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3000";
 
 export async function searchHotels(
@@ -52,4 +68,33 @@ export async function searchHotels(
   }
 
   return payload as HotelSearchResponse;
+}
+
+export async function getHotelHistory(
+  hotel: Pick<HotelOffer, "propertyToken" | "name">,
+  search: HotelSearchRequest,
+): Promise<HotelHistoryResponse> {
+  const params = new URLSearchParams({
+    name: hotel.name,
+    checkIn: search.checkIn,
+    checkOut: search.checkOut,
+    adults: String(search.adults),
+    children: String(search.children),
+    currency: search.currency,
+  });
+  if (hotel.propertyToken) {
+    params.set("propertyToken", hotel.propertyToken);
+  }
+
+  const response = await fetch(`${API_BASE_URL}/api/hotels/history?${params}`);
+  const payload: unknown = await response.json();
+  if (!response.ok) {
+    const error =
+      typeof payload === "object" && payload !== null && "error" in payload
+        ? String(payload.error)
+        : `Сервер вернул HTTP ${response.status}`;
+    throw new Error(error);
+  }
+
+  return payload as HotelHistoryResponse;
 }
